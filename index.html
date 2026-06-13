@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>CARD//MANAGER</title>
+<!-- PWA: manifest.json を別ファイルで指定（iOS Safari はinline data:URIを無視するため必須） -->
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CARDMGR">
+<meta name="theme-color" content="#09090d">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:      #09090d;
+  --surface: #0f0f16;
+  --card:    #13131c;
+  --border:  #1e1e2e;
+  --bdh:     #2c2c42;
+  --t1:#ddddf8; --t2:#7878a8; --t3:#3a3a58;
+
+  --c-active:  #00c853;
+  --c-notice:  #cc00ff;
+  --c-caution: #2979ff;
+  --c-warning: #ffd600;
+  --c-high:    #ff6d00;
+  --c-crit:    #ff1744;
+  --c-exp:     #546e7a;
+  --c-done:    #2a2a42;
+
+  --mono:'Courier New',Menlo,monospace;
+  --sans:system-ui,-apple-system,sans-serif;
+  --r:8px; --rs:5px;
+}
+
+html,body{min-height:100%;background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:14px;line-height:1.5}
+.app{max-width:540px;margin:0 auto;padding:20px 14px 100px}
+
+/* ─── HEADER ─── */
+.hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.hd-title{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--t3);text-transform:uppercase;user-select:none}
+.hd-title b{color:var(--c-active);font-weight:400}
+.hd-r{display:flex;align-items:center;gap:7px}
+
+.btn-mute{width:34px;height:32px;background:transparent;border:1px solid var(--bdh);border-radius:var(--rs);color:var(--t2);font-size:15px;cursor:pointer;transition:all .15s}
+.btn-mute:hover{border-color:var(--t2);color:var(--t1)}
+.btn-mute.muted{color:var(--t3);border-color:var(--border)}
+
+.btn-new{display:flex;align-items:center;gap:5px;padding:7px 13px;background:var(--c-active);color:#000;border:none;border-radius:var(--rs);font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s;font-family:var(--mono);letter-spacing:.04em}
+.btn-new:hover{opacity:.82}.btn-new:active{opacity:.65}
+
+/* ─── SEARCH & BANNER ─── */
+.sb-wrap{position:relative;margin-bottom:12px}
+.sb-input{width:100%;padding:10px 14px 10px 34px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:var(--rs);color:var(--t1);font-family:var(--sans);font-size:13px;outline:none;transition:border-color .2s}
+.sb-input:focus{border-color:var(--c-active);background:var(--bg)}
+.sb-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:14px;pointer-events:none}
+
+.banner{display:flex;align-items:center;gap:10px;padding:9px 12px;background:rgba(240,160,32,.07);border:1px solid rgba(240,160,32,.22);border-radius:var(--rs);margin-bottom:12px;font-size:12px;color:var(--t2)}
+.banner button{margin-left:auto;flex-shrink:0;padding:4px 10px;background:transparent;border:1px solid var(--c-warning);border-radius:3px;color:var(--c-warning);font-size:11px;font-family:var(--mono);cursor:pointer}
+.banner button:hover{background:rgba(240,160,32,.1)}
+.hidden{display:none!important}
+
+/* ─── CARD LIST ─── */
+.cl{display:flex;flex-direction:column;gap:9px}
+.empty{text-align:center;padding:60px 20px;color:var(--t3);font-family:var(--mono);font-size:11px;letter-spacing:.1em}
+.empty-icon{font-size:26px;opacity:.3;margin-bottom:10px}
+
+/* ─── CARD ─── */
+.card{position:relative;background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:background .3s,border-color .3s}
+.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+
+/* per-state */
+.card[data-s="active"]  {border-color:rgba(0,200,83,.2);background:rgba(0,200,83,.055)}
+.card[data-s="active"]::before  {background:var(--c-active)}
+.card[data-s="notice"]  {border-color:rgba(204,0,255,.2);background:rgba(204,0,255,.05)}
+.card[data-s="notice"]::before  {background:var(--c-notice)}
+.card[data-s="caution"] {border-color:rgba(41,121,255,.22);background:rgba(41,121,255,.06)}
+.card[data-s="caution"]::before {background:var(--c-caution)}
+.card[data-s="warning"] {border-color:rgba(255,214,0,.25);background:rgba(255,214,0,.055)}
+.card[data-s="warning"]::before {background:var(--c-warning)}
+.card[data-s="high"]    {border-color:rgba(255,109,0,.28);background:rgba(255,109,0,.07)}
+.card[data-s="high"]::before    {background:var(--c-high)}
+.card[data-s="crit"]    {border-color:rgba(255,23,68,.32);background:rgba(255,23,68,.08);animation:pulse 1.8s ease-in-out infinite}
+.card[data-s="crit"]::before    {background:var(--c-crit)}
+.card[data-s="expired"] {border-color:rgba(84,110,122,.22);background:rgba(84,110,122,.045)}
+.card[data-s="expired"]::before {background:var(--c-exp)}
+.card[data-s="acknowledged"]{opacity:.48}
+.card[data-s="acknowledged"]::before{background:var(--c-done)}
+
+@keyframes pulse{0%,100%{border-color:rgba(255,23,68,.32)}50%{border-color:rgba(255,23,68,.68)}}
+
+.ci{padding:13px 13px 13px 17px}
+
+/* top row */
+.ct{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:7px}
+.ct-l{flex:1;min-width:0}
+.ctitle{font-size:15px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ccode{font-family:var(--mono);font-size:11px;color:var(--t2);margin-top:2px;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* badge */
+.badge{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:3px 8px;border-radius:3px;text-transform:uppercase;white-space:nowrap}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+
+.card[data-s="active"]  .badge{background:rgba(0,200,83,.12);color:var(--c-active)}
+.card[data-s="notice"]  .badge{background:rgba(204,0,255,.12);color:var(--c-notice)}
+.card[data-s="caution"] .badge{background:rgba(41,121,255,.12);color:var(--c-caution)}
+.card[data-s="warning"] .badge{background:rgba(255,214,0,.12);color:var(--c-warning)}
+.card[data-s="high"]    .badge{background:rgba(255,109,0,.12);color:var(--c-high)}
+.card[data-s="crit"]    .badge{background:rgba(255,23,68,.12);color:var(--c-crit)}
+.card[data-s="expired"] .badge{background:rgba(84,110,122,.14);color:var(--c-exp)}
+.card[data-s="acknowledged"].badge{background:rgba(42,42,66,.25);color:var(--t3)}
+
+/* timer */
+.ctimer{font-family:var(--mono);font-size:25px;font-weight:400;font-variant-numeric:tabular-nums;letter-spacing:.05em;line-height:1;margin:2px 0 7px}
+.card[data-s="active"]  .ctimer{color:var(--c-active)}
+.card[data-s="notice"]  .ctimer{color:var(--c-notice)}
+.card[data-s="caution"] .ctimer{color:var(--c-caution)}
+.card[data-s="warning"] .ctimer{color:var(--c-warning)}
+.card[data-s="high"]    .ctimer{color:var(--c-high)}
+.card[data-s="crit"]    .ctimer{color:var(--c-crit)}
+.card[data-s="expired"] .ctimer{color:var(--c-exp)}
+.card[data-s="acknowledged"].ctimer{color:var(--t3)}
+
+/* progress bar */
+.cprog{height:2px;background:var(--border);border-radius:2px;margin-bottom:9px;overflow:hidden}
+.cpb{height:100%;border-radius:2px;transition:width 1s linear}
+.card[data-s="active"]  .cpb{background:var(--c-active)}
+.card[data-s="notice"]  .cpb{background:var(--c-notice)}
+.card[data-s="caution"] .cpb{background:var(--c-caution)}
+.card[data-s="warning"] .cpb{background:var(--c-warning)}
+.card[data-s="high"]    .cpb{background:var(--c-high)}
+.card[data-s="crit"]    .cpb{background:var(--c-crit)}
+.card[data-s="expired"] .cpb{background:var(--c-exp);width:0!important}
+.card[data-s="acknowledged"].cpb{background:var(--c-done)}
+
+/* memo */
+.cmemo{font-size:11.5px;color:var(--t2);margin-bottom:9px;padding-top:7px;border-top:1px dashed var(--bdh);white-space:pre-wrap;word-break:break-all}
+
+/* footer */
+.cf{display:flex;align-items:center;justify-content:space-between;padding-top:7px;border-top:1px solid var(--border)}
+.cuid{font-family:var(--mono);font-size:10px;color:var(--t3);letter-spacing:.04em;cursor:text;user-select:all;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.cas{display:flex;gap:4px;flex-shrink:0;margin-left:8px}
+.cbtn{display:flex;align-items:center;justify-content:center;width:28px;height:26px;background:transparent;border:1px solid var(--bdh);border-radius:var(--rs);color:var(--t2);cursor:pointer;font-size:13px;transition:all .15s}
+.cbtn:hover{border-color:var(--t2);color:var(--t1)}
+.cbtn.ack:hover{border-color:var(--c-active);color:var(--c-active)}
+.cbtn.edit:hover{border-color:var(--c-caution);color:var(--c-caution)}
+.cbtn.del:hover{border-color:var(--c-crit);color:var(--c-crit)}
+.cbtn.del.armed{border-color:var(--c-crit)!important;color:var(--c-crit)!important;background:rgba(255,23,68,.08)}
+
+/* ─── MODAL ─── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(5px);display:flex;align-items:flex-end;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{width:100%;max-width:540px;background:var(--surface);border:1px solid var(--bdh);border-radius:var(--r) var(--r) 0 0;padding:18px 16px 34px;transform:translateY(30px);transition:transform .28s cubic-bezier(.34,1.35,.64,1)}
+.overlay.open .modal{transform:translateY(0)}
+.mhnd{width:30px;height:4px;background:var(--bdh);border-radius:2px;margin:0 auto 16px}
+.mtit{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--t3);text-transform:uppercase;margin-bottom:16px}
+.fg{margin-bottom:13px}
+.fl{display:block;font-size:10px;font-family:var(--mono);color:var(--t2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px}
+.fi{width:100%;padding:9px 11px;background:var(--bg);border:1px solid var(--bdh);border-radius:var(--rs);color:var(--t1);font-family:var(--mono);font-size:13px;outline:none;transition:border-color .15s}
+.fi:focus{border-color:var(--c-active)}.fi::placeholder{color:var(--t3)}
+textarea.fi{resize:vertical;min-height:50px}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.pb{padding:8px 4px;background:var(--bg);border:1px solid var(--bdh);border-radius:var(--rs);color:var(--t2);font-family:var(--mono);font-size:12px;cursor:pointer;text-align:center;transition:all .15s}
+.pb:hover{border-color:var(--t2);color:var(--t1)}
+.pb.sel{background:rgba(0,200,83,.1);border-color:var(--c-active);color:var(--c-active)}
+.crow{display:flex;gap:7px;margin-top:8px}
+.crow .fi{flex:1}
+.fsel{padding:9px 10px;background:var(--bg);border:1px solid var(--bdh);border-radius:var(--rs);color:var(--t1);font-family:var(--mono);font-size:13px;outline:none;cursor:pointer}
+.mas{display:flex;gap:7px;margin-top:20px}
+.bc2{flex:1;padding:11px;background:transparent;border:1px solid var(--bdh);border-radius:var(--rs);color:var(--t2);font-size:13px;cursor:pointer;transition:all .15s}
+.bc2:hover{border-color:var(--t2);color:var(--t1)}
+.bcr{flex:2;padding:11px;background:var(--c-active);border:none;border-radius:var(--rs);color:#000;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--mono);letter-spacing:.06em;transition:opacity .15s}
+.bcr:hover{opacity:.85}.bcr:disabled{opacity:.35;cursor:default}
+
+/* ─── TOAST ─── */
+.tc{position:fixed;top:12px;right:12px;display:flex;flex-direction:column;gap:7px;z-index:200;pointer-events:none}
+.toast{background:var(--surface);border:1px solid var(--bdh);border-left:3px solid var(--c-crit);border-radius:var(--rs);padding:9px 13px;min-width:180px;max-width:280px;box-shadow:0 4px 24px rgba(0,0,0,.55);animation:tin .25s ease}
+@keyframes tin{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.t-l{font-family:var(--mono);font-size:9px;color:var(--c-crit);letter-spacing:.15em;text-transform:uppercase;margin-bottom:3px}
+.t-t{font-size:13px;font-weight:600;color:var(--t1)}
+.t-c{font-family:var(--mono);font-size:11px;color:var(--t2);margin-top:2px}
+
+/* ─── LEGEND ─── */
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-bottom:16px;padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:var(--rs)}
+.leg-item{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--t2)}
+.leg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="hd">
+    <div class="hd-title">CARD<b>//</b>MANAGER</div>
+    <div class="hd-r">
+      <button class="btn-mute" id="btn-mute" title="音を切る">🔔</button>
+      <button class="btn-new" id="btn-open">＋ 新規</button>
+    </div>
+  </header>
+
+  <!-- 凡例 -->
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-active)"></div>進行中</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-notice)"></div>注意(6h)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-caution)"></div>要確認(4h)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-warning)"></div>警戒(2h)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-high)"></div>高警戒(1h)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-crit)"></div>緊急(30m)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-exp)"></div>期限切れ</div>
+  </div>
+
+  <div id="nb" class="banner hidden">
+    <span>⚠ 期限通知を有効にしますか？</span>
+    <button id="btn-notif">許可する</button>
+  </div>
+
+  <!-- 検索バー -->
+  <div class="sb-wrap">
+    <span class="sb-icon">🔍</span>
+    <input type="text" id="q-search" class="sb-input" placeholder="検索 (タイトル, コード, UID, メモ)" autocomplete="off">
+  </div>
+
+  <div id="cl" class="cl">
+    <div class="empty" id="empty">
+      <div class="empty-icon">◫</div>
+      <div>カードがありません</div>
+      <div style="margin-top:4px;opacity:.5">新規作成または検索条件を変更してください</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Firebase FCM: ページを閉じていても通知センターに届く ── -->
+<script type="module">
+import { initializeApp }          from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js';
+import { getMessaging, getToken, onMessage }
+                                  from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-messaging.js';
+
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBv2-_eFc4JJF3pDX-suKm8ZUtZSaWvY2U",
+  authDomain:        "card-base-378b7.firebaseapp.com",
+  projectId:         "card-base-378b7",
+  storageBucket:     "card-base-378b7.firebasestorage.app",
+  messagingSenderId: "542621553038",
+  appId:             "1:542621553038:web:dab3b78c0c889d678614df",
+};
+const VAPID_KEY    = 'BGcqbnpNAeKK8UUU54KpwA3Kq5bfX4P74xeCYzdzAL2YnkWW_bQHHgK9n-u3ZVABESeyo89A5037Eq3aWMMr0I0';
+// ↓ Cloudflare WorkersデプロイURL (後で差し替え)
+const WORKER_URL   = 'https://card-notify.yichuilei86.workers.dev';
+
+let fcmToken = localStorage.getItem('fcm-token');
+
+async function initFCM() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    // 1. Service Worker 登録
+    const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+
+    // 2. 通知許可
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return;
+
+    // 3. FCM トークン取得
+    const app       = initializeApp(FIREBASE_CONFIG);
+    const messaging = getMessaging(app);
+    const token     = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: reg,
+    });
+
+    if (token) {
+      fcmToken = token;
+      localStorage.setItem('fcm-token', token);
+      // 4. Workerに登録 + 現在のカードデータを同期
+      await syncToWorker('register');
+      // 通知バナーを非表示
+      document.getElementById('nb')?.classList.add('hidden');
+    }
+
+    // フォアグラウンド通知 (ページが開いている間)
+    onMessage(messaging, payload => {
+      // アプリが開いているときはアプリ内のtoastで表示済みなので何もしない
+      // (必要なら ここで showToast を呼ぶ)
+    });
+
+  } catch(e) {
+    console.error('[FCM] 初期化エラー:', e);
+  }
+}
+
+// カードデータをCloudflare Workerに同期 (カード追加/削除/更新のたびに呼ぶ)
+window.syncToWorker = async function(endpoint = 'sync') {
+  if (!fcmToken || !WORKER_URL.includes('workers.dev')) return;
+  try {
+    const cards = JSON.parse(localStorage.getItem('card-mgr-v3') || '[]');
+    await fetch(`${WORKER_URL}/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: fcmToken, cards }),
+    });
+  } catch(e) {
+    // ネットワークエラーは無視（ページが開いている間の通知は引き続き動く）
+  }
+};
+
+// ページロード時に初期化
+initFCM();
+</script>
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="mhnd"></div>
+    <div class="mtit" id="m-tit">// 新規カード</div>
+    <div class="fg">
+      <label class="fl" for="m-title">タイトル</label>
+      <input class="fi" type="text" id="m-title" placeholder="例: 案件A, 2368995" autocomplete="off">
+    </div>
+    <div class="fg">
+      <label class="fl" for="m-code">コード</label>
+      <input class="fi" type="text" id="m-code" placeholder="例: H32MVAH5GGK3" autocomplete="off">
+    </div>
+    <div class="fg">
+      <label class="fl" for="m-memo">メモ (任意)</label>
+      <textarea class="fi" id="m-memo" rows="2" placeholder="例: iPad用、イベント終了後確認"></textarea>
+    </div>
+    <div class="fg">
+      <label class="fl" id="m-timer-label">タイマー期間</label>
+      <div class="pgrid" id="pgrid">
+        <button class="pb" data-h="2">2時間</button>
+        <button class="pb" data-h="24">24時間</button>
+        <button class="pb" data-h="72">72時間</button>
+        <button class="pb" data-d="7">7日</button>
+        <button class="pb" data-d="30">30日</button>
+        <button class="pb" data-custom="1">カスタム</button>
+      </div>
+      <div id="crow" class="crow hidden">
+        <input class="fi" type="number" id="m-cv" min="1" max="9999" placeholder="値">
+        <select class="fsel" id="m-cu">
+          <option value="h">時間</option>
+          <option value="d">日</option>
+        </select>
+      </div>
+    </div>
+    <div class="mas">
+      <button class="bc2" id="btn-cancel">キャンセル</button>
+      <button class="bcr" id="btn-create" disabled>作成する</button>
+    </div>
+  </div>
+</div>
+
+<div class="tc" id="tc"></div>
+
+<script>
+'use strict';
+
+/* ── CONSTANTS ── */
+const STORAGE = 'card-mgr-v3'; // バージョン更新
+
+const THRESHOLDS = [
+  { ms: 30 * 60000,    s: 'crit'    },
+  { ms: 60 * 60000,    s: 'high'    },
+  { ms: 2  * 3600000,  s: 'warning' },
+  { ms: 4  * 3600000,  s: 'caution' },
+  { ms: 6  * 3600000,  s: 'notice'  },
+];
+
+const LEVEL = { active:0, notice:1, caution:2, warning:3, high:4, crit:5, expired:6, acknowledged:-1 };
+const SLABEL = { active:'進行中', notice:'注意', caution:'要確認', warning:'警戒', high:'高警戒', crit:'緊急', expired:'期限切れ', acknowledged:'確認済み' };
+
+/* ── STATE ── */
+let cards    = [];
+let notified = new Set();
+let soundMap = {};
+let armMap   = {};
+let selMs    = null;
+let editUid  = null; // 編集モード用UID
+let muted    = false;
+let audioCtx = null;
+
+/* ── WEB AUDIO ── */
+function initAudio() {
+  if (audioCtx) return;
+  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+}
+document.addEventListener('click',      initAudio, { once: true });
+document.addEventListener('touchstart', initAudio, { once: true, passive: true });
+
+function beep(freq, dur, vol, type = 'sine') {
+  if (muted || !audioCtx) return;
+  try {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.type = type;
+    o.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    g.gain.setValueAtTime(vol, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+    o.start();
+    o.stop(audioCtx.currentTime + dur + 0.02);
+  } catch(e) {}
+}
+
+function playSoundForLevel(lv) {
+  switch(lv) {
+    case 2: beep(880, 0.12, 0.22, 'sine'); break;
+    case 3: beep(660, 0.14, 0.32, 'sine'); setTimeout(() => beep(660, 0.14, 0.32, 'sine'), 280); break;
+    case 4: beep(440, 0.36, 0.42, 'square'); break;
+    case 5: beep(330, 0.28, 0.52, 'sawtooth'); setTimeout(() => beep(330, 0.28, 0.52, 'sawtooth'), 420); break;
+    case 6: beep(440, 0.18, 0.45, 'sine'); setTimeout(() => beep(330, 0.22, 0.45, 'sine'), 230); setTimeout(() => beep(220, 0.38, 0.38, 'sine'), 480); break;
+  }
+}
+
+/* ── STORAGE ── */
+function load() {
+  try {
+    // 移行措置 (v2 -> v3)
+    let r = localStorage.getItem(STORAGE);
+    if (!r) r = localStorage.getItem('card-mgr-v2'); 
+    if (r) {
+      cards = JSON.parse(r);
+      cards.forEach(c => { if (c.notified) notified.add(c.uid); });
+    }
+  } catch { cards = []; }
+}
+function save() {
+  localStorage.setItem(STORAGE, JSON.stringify(cards));
+  if (typeof window.syncToWorker === "function") window.syncToWorker("sync");
+}
+
+function genUid() {
+  try { return crypto.randomUUID().replace(/-/g,'').slice(0,16); } catch {}
+  return Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+}
+
+/* ── STATUS ── */
+function statusOf(card) {
+  if (card.status === 'acknowledged') return 'acknowledged';
+  const now = Date.now();
+  if (now >= card.expireAt) return 'expired';
+  const rem = card.expireAt - now;
+  for (const t of THRESHOLDS) { if (rem <= t.ms) return t.s; }
+  return 'active';
+}
+
+function fmt(ms) {
+  if (ms <= 0) return 'EXPIRED';
+  const s  = Math.floor(ms / 1000);
+  const d  = Math.floor(s / 86400);
+  const h  = Math.floor((s % 86400) / 3600);
+  const m  = Math.floor((s % 3600) / 60);
+  const sc = s % 60;
+  const p  = n => String(n).padStart(2, '0');
+  return d > 0 ? `${d}d ${p(h)}:${p(m)}:${p(sc)}` : `${p(h)}:${p(m)}:${p(sc)}`;
+}
+
+function progPct(card, s) {
+  if (s === 'acknowledged' || s === 'expired') return 0;
+  const rem = card.expireAt - Date.now();
+  const tot = card.expireAt - card.createdAt;
+  return Math.max(0, Math.min(100, (rem / tot) * 100));
+}
+
+/* ── RENDER ── */
+const cl      = document.getElementById('cl');
+const empty   = document.getElementById('empty');
+const qSearch = document.getElementById('q-search');
+
+qSearch.addEventListener('input', renderAll);
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function makeCard(c) {
+  const s   = statusOf(c);
+  const rem = c.expireAt - Date.now();
+  const pct = progPct(c, s);
+  const u12 = c.uid.slice(0, 12) + '...';
+
+  const el = document.createElement('div');
+  el.className  = 'card';
+  el.dataset.uid = c.uid;
+  el.dataset.s   = s;
+
+  el.innerHTML = `
+<div class="ci">
+  <div class="ct">
+    <div class="ct-l">
+      <div class="ctitle">${esc(c.title || '(タイトルなし)')}</div>
+      ${c.code ? `<div class="ccode">${esc(c.code)}</div>` : ''}
+    </div>
+    <span class="badge">${SLABEL[s]}</span>
+  </div>
+  <div class="ctimer">${fmt(rem)}</div>
+  <div class="cprog"><div class="cpb" style="width:${pct}%"></div></div>
+  ${c.memo ? `<div class="cmemo">${esc(c.memo)}</div>` : ''}
+  <div class="cf">
+    <div class="cuid" title="${esc(c.uid)}">uid:${esc(u12)}</div>
+    <div class="cas">
+      <button class="cbtn dup" data-uid="${esc(c.uid)}" title="複製">⧉</button>
+      <button class="cbtn edit" data-uid="${esc(c.uid)}" title="編集">✎</button>
+      ${s !== 'acknowledged' ? `<button class="cbtn ack" data-uid="${esc(c.uid)}" title="確認済みにする">✓</button>` : ''}
+      <button class="cbtn del" data-uid="${esc(c.uid)}" title="削除">✕</button>
+    </div>
+  </div>
+</div>`;
+  return el;
+}
+
+function renderAll() {
+  cl.querySelectorAll('.card').forEach(e => e.remove());
+  
+  // 期限が近い順にソート (確認済みのものは一番下へ)
+  let displayCards = [...cards].sort((a, b) => {
+    if (a.status === 'acknowledged' && b.status !== 'acknowledged') return 1;
+    if (b.status === 'acknowledged' && a.status !== 'acknowledged') return -1;
+    return a.expireAt - b.expireAt;
+  });
+
+  // 検索フィルタリング
+  const q = qSearch.value.toLowerCase().trim();
+  if (q) {
+    displayCards = displayCards.filter(c => 
+      (c.title && c.title.toLowerCase().includes(q)) ||
+      (c.code && c.code.toLowerCase().includes(q)) ||
+      (c.memo && c.memo.toLowerCase().includes(q)) ||
+      (c.uid && c.uid.toLowerCase().includes(q))
+    );
+  }
+
+  if (!displayCards.length) { empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  displayCards.forEach(c => cl.appendChild(makeCard(c)));
+}
+
+/* ── TICK (毎秒) ── */
+function tick() {
+  let topSound = -1;
+  let needRerender = false;
+
+  cards.forEach(c => {
+    const s  = statusOf(c);
+    const lv = LEVEL[s];
+    const prv = soundMap[c.uid] ?? -1;
+
+    if (lv > prv && lv >= 2 && c.status !== 'acknowledged') {
+      soundMap[c.uid] = lv;
+      if (lv > topSound) topSound = lv;
+    }
+
+    const el = cl.querySelector(`.card[data-uid="${c.uid}"]`);
+    if (!el) return;
+
+    // 状態が変化したら再描画（ソート順が変わる可能性もあるため）
+    if (el.dataset.s !== s) { needRerender = true; }
+
+    const te = el.querySelector('.ctimer');
+    if (te) te.textContent = fmt(c.expireAt - Date.now());
+
+    const pe = el.querySelector('.cpb');
+    if (pe) pe.style.width = progPct(c, s) + '%';
+
+    if (s === 'expired' && !notified.has(c.uid) && c.status !== 'acknowledged') {
+      notified.add(c.uid);
+      c.notified = true;
+      save();
+      fireNotify(c);
+    }
+  });
+
+  if (topSound >= 2) playSoundForLevel(topSound);
+  if (needRerender) renderAll();
+}
+
+/* ── NOTIFICATIONS ── */
+const nb = document.getElementById('nb');
+document.getElementById('btn-notif').addEventListener('click', () => {
+  Notification.requestPermission().then(p => { if (p !== 'default') nb.classList.add('hidden'); });
+});
+function checkPerm() {
+  if ('Notification' in window && Notification.permission === 'default') { nb.classList.remove('hidden'); }
+}
+function fireNotify(c) {
+  showToast(c);
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try { new Notification('期限到達', { body: (c.title || '') + (c.code ? '\n' + c.code : '') }); } catch {}
+  }
+}
+
+/* ── TOAST ── */
+const tc = document.getElementById('tc');
+function showToast(c) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `<div class="t-l">期限到達</div><div class="t-t">${esc(c.title || '(タイトルなし)')}</div>${c.code ? `<div class="t-c">${esc(c.code)}</div>` : ''}`;
+  tc.appendChild(t);
+  setTimeout(() => {
+    t.style.cssText = 'opacity:0;transition:opacity .4s';
+    setTimeout(() => t.remove(), 400);
+  }, 6000);
+}
+
+/* ── CARD ACTIONS ── */
+cl.addEventListener('click', e => {
+  const btn = e.target.closest('.cbtn');
+  if (!btn) return;
+  const uid = btn.dataset.uid;
+  if (!uid) return;
+
+  if (btn.classList.contains('dup'))       dupCard(uid);
+  else if (btn.classList.contains('edit')) editCard(uid);
+  else if (btn.classList.contains('ack'))  ackCard(uid);
+  else if (btn.classList.contains('del'))  handleDel(btn, uid);
+});
+
+function handleDel(btn, uid) {
+  if (armMap[uid]) {
+    clearTimeout(armMap[uid]);
+    delete armMap[uid];
+    delCard(uid);
+  } else {
+    btn.classList.add('armed');
+    btn.title = '→ もう一度で削除';
+    armMap[uid] = setTimeout(() => {
+      delete armMap[uid];
+      const b = cl.querySelector(`.del[data-uid="${uid}"]`);
+      if (b) { b.classList.remove('armed'); b.title = '削除'; }
+    }, 2500);
+  }
+}
+
+function dupCard(uid) {
+  const orig = cards.find(c => c.uid === uid);
+  if (!orig) return;
+  const dur = orig.expireAt - orig.createdAt;
+  const now = Date.now();
+  const nc = {
+    uid: genUid(), title: orig.title, code: orig.code, memo: orig.memo || '',
+    createdAt: now, expireAt: now + dur, status: 'active', notified: false
+  };
+  cards.push(nc);
+  save(); renderAll();
+}
+
+function editCard(uid) {
+  const c = cards.find(x => x.uid === uid);
+  if (!c) return;
+  editUid = uid;
+  mTitle.value = c.title || '';
+  mCode.value = c.code || '';
+  mMemo.value = c.memo || '';
+  document.getElementById('m-tit').textContent = '// 編集';
+  document.getElementById('m-timer-label').textContent = 'タイマー期間 (変更する場合のみ選択)';
+  btnCreate.textContent = '保存する';
+  
+  overlay.classList.add('open');
+  validate();
+  mTitle.focus();
+}
+
+function ackCard(uid) {
+  const c = cards.find(x => x.uid === uid);
+  if (c) {
+    c.status = 'acknowledged';
+    delete soundMap[uid];
+    save(); renderAll();
+  }
+}
+
+function delCard(uid) {
+  cards = cards.filter(c => c.uid !== uid);
+  notified.delete(uid);
+  delete soundMap[uid];
+  delete armMap[uid];
+  save(); renderAll();
+}
+
+/* ── MUTE BUTTON ── */
+const btnMute = document.getElementById('btn-mute');
+btnMute.addEventListener('click', () => {
+  muted = !muted;
+  btnMute.textContent = muted ? '🔕' : '🔔';
+  btnMute.classList.toggle('muted', muted);
+  btnMute.title = muted ? '音を有効にする' : '音を切る';
+});
+
+/* ── MODAL ── */
+const overlay  = document.getElementById('overlay');
+const pgrid    = document.getElementById('pgrid');
+const crowEl   = document.getElementById('crow');
+const mTitle   = document.getElementById('m-title');
+const mCode    = document.getElementById('m-code');
+const mMemo    = document.getElementById('m-memo');
+const mCv      = document.getElementById('m-cv');
+const mCu      = document.getElementById('m-cu');
+const btnCreate = document.getElementById('btn-create');
+
+function openModal()  { resetModal(); overlay.classList.add('open'); mTitle.focus(); }
+function closeModal() { overlay.classList.remove('open'); }
+function resetModal() {
+  mTitle.value = ''; mCode.value = ''; mMemo.value = ''; mCv.value = '';
+  selMs = null; editUid = null;
+  document.getElementById('m-tit').textContent = '// 新規カード';
+  document.getElementById('m-timer-label').textContent = 'タイマー期間';
+  btnCreate.textContent = '作成する';
+  crowEl.classList.add('hidden');
+  pgrid.querySelectorAll('.pb').forEach(b => b.classList.remove('sel'));
+  validate();
+}
+
+document.getElementById('btn-open').addEventListener('click', openModal);
+document.getElementById('btn-cancel').addEventListener('click', closeModal);
+overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+pgrid.addEventListener('click', e => {
+  const b = e.target.closest('.pb');
+  if (!b) return;
+  pgrid.querySelectorAll('.pb').forEach(x => x.classList.remove('sel'));
+  b.classList.add('sel');
+  if (b.dataset.custom) {
+    crowEl.classList.remove('hidden');
+    selMs = null; mCv.focus();
+  } else {
+    crowEl.classList.add('hidden');
+    selMs = b.dataset.h ? +b.dataset.h * 3600000 : +b.dataset.d * 86400000;
+  }
+  validate();
+});
+
+function calcCustom() {
+  const v = parseFloat(mCv.value);
+  selMs = (!isNaN(v) && v > 0) ? (mCu.value === 'h' ? v * 3600000 : v * 86400000) : null;
+}
+mCv.addEventListener('input',  () => { calcCustom(); validate(); });
+mCu.addEventListener('change', () => { calcCustom(); validate(); });
+
+function validate() {
+  if (editUid) {
+    btnCreate.disabled = false; // 編集時はタイマー変更なしでも保存可能
+  } else {
+    btnCreate.disabled = !selMs; // 新規作成時はタイマー必須
+  }
+}
+
+btnCreate.addEventListener('click', () => {
+  const now = Date.now();
+  if (editUid) {
+    const c = cards.find(x => x.uid === editUid);
+    if (c) {
+      c.title = mTitle.value.trim();
+      c.code  = mCode.value.trim();
+      c.memo  = mMemo.value.trim();
+      // タイマーの選択が上書きされた場合のみリセット
+      if (selMs) {
+        c.createdAt = now;
+        c.expireAt  = now + selMs;
+        c.status    = 'active';
+        c.notified  = false;
+        delete soundMap[c.uid];
+      }
+    }
+  } else {
+    if (!selMs) return;
+    const c = {
+      uid: genUid(),
+      title: mTitle.value.trim(),
+      code:  mCode.value.trim(),
+      memo:  mMemo.value.trim(),
+      createdAt: now,
+      expireAt:  now + selMs,
+      status: 'active',
+      notified: false
+    };
+    cards.push(c);
+  }
+  save(); renderAll(); closeModal();
+});
+
+/* ── INIT ── */
+load();
+renderAll();
+checkPerm();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
